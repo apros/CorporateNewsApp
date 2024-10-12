@@ -2,6 +2,7 @@ using CorporateNews.Web.Services;
 using CorporateNews.Web.Plugins;
 using Microsoft.Extensions.DependencyInjection;
 using Microsoft.SemanticKernel;
+using Microsoft.Extensions.Options;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -16,6 +17,9 @@ builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 builder.Logging.AddDebug();
 
+// Configure OpenAI settings
+builder.Services.Configure<OpenAISettings>(builder.Configuration.GetSection("OpenAI"));
+
 // Register NewsPlugin as a singleton, injecting IHttpClientFactory and IConfiguration
 builder.Services.AddSingleton<NewsPlugin>(sp =>
     new NewsPlugin(
@@ -25,12 +29,14 @@ builder.Services.AddSingleton<NewsPlugin>(sp =>
     )
 );
 
+builder.Services.AddSingleton<IKernelProvider, KernelProvider>();
 // Register SemanticKernelService as a singleton, injecting IConfiguration and NewsPlugin
 builder.Services.AddSingleton<SemanticKernelService>(sp =>
     new SemanticKernelService(
-        sp.GetRequiredService<IConfiguration>(),
+        sp.GetRequiredService < IOptions<OpenAISettings>>(),
         sp.GetRequiredService<NewsPlugin>(),
-        sp.GetRequiredService<ILogger<SemanticKernelService>>()
+        sp.GetRequiredService<ILogger<SemanticKernelService>>(),
+        sp.GetService<IKernelProvider>()
     )
 );
 

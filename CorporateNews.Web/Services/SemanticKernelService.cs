@@ -4,42 +4,57 @@ using Microsoft.SemanticKernel.Connectors.OpenAI;
 using CorporateNews.Web.Plugins;
 using System.Text;
 using Microsoft.Extensions.Logging;
+using Microsoft.Extensions.Options;
 
 namespace CorporateNews.Web.Services
 {
-    public class SemanticKernelService
+    public class SemanticKernelService : ISemanticKernelService
     {
         private readonly Kernel _kernel;
         private readonly IChatCompletionService _chatService;
-        private ChatHistory _chatHistory;
         private readonly ILogger<SemanticKernelService> _logger;
+        private readonly OpenAISettings _openAISettings;
+        private ChatHistory _chatHistory;
 
-        public SemanticKernelService(IConfiguration configuration, KernelPlugin newsPlugin, ILogger<SemanticKernelService> logger)
+        public SemanticKernelService(
+            IOptions<OpenAISettings> openAISettings,
+            KernelPlugin newsPlugin,
+            ILogger<SemanticKernelService> logger,
+            IKernelProvider kernelProvider)
         {
             _logger = logger;
 
+            _kernel = kernelProvider.CreateKernel(openAISettings.Value.ModelId, openAISettings.Value.ApiKey);
+            _kernel.Plugins.Add(newsPlugin);
+            _chatService = kernelProvider.GetChatCompletionService(_kernel);
+
+            ResetConversation();
+        }
+
+        protected virtual Kernel CreateKernel(OpenAISettings settings, KernelPlugin newsPlugin)
+        {
             var builder = Kernel.CreateBuilder()
                 .AddOpenAIChatCompletion(
-                    configuration["OpenAI:ModelId"] ?? "gpt-4",
-                    configuration["OpenAI:ApiKey"] ?? throw new ArgumentNullException("OpenAI:ApiKey")
+                    settings.ModelId,
+                    settings.ApiKey
                 );
 
-            // Add NewsPlugin            
             builder.Plugins.Add(newsPlugin);
 
-            _kernel = builder.Build();
-            _chatService = _kernel.GetRequiredService<IChatCompletionService>();
-            _chatHistory = new ChatHistory();
-
-            // Initialize the chat with a system message
-            _chatHistory.AddSystemMessage("You are an AI assistant that helps users get information about company promotions and sales. Use the available functions to retrieve and provide relevant information.");
+            return builder.Build();
         }
 
         public async Task<string> ProcessQueryAsync(string query)
         {
+            if (string.IsNullOrWhiteSpace(query))
+            {
+                throw new ArgumentException("Query cannot be null or empty", nameof(query));
+            }
+
+            _logger.LogInformation("Processing query: {Query}", query);
+
             try
             {
-                _logger.LogInformation($"Processing query: {query}");
                 _chatHistory.AddUserMessage(query);
 
                 var completion = _chatService.GetStreamingChatMessageContentsAsync(
@@ -50,15 +65,7 @@ namespace CorporateNews.Web.Services
                     },
                     kernel: _kernel);
 
-                StringBuilder fullMessage = new StringBuilder();
-                await foreach (var content in completion)
-                {
-                    _logger.LogDebug($"Received content: {content.Role} - {content.Content}");
-                    fullMessage.Append(content.Content);
-                }
-
-                string response = fullMessage.ToString();
-                _logger.LogInformation($"Final response: {response}");
+                var response = await ProcessCompletionAsync(completion);
 
                 if (string.IsNullOrWhiteSpace(response))
                 {
@@ -73,14 +80,43 @@ namespace CorporateNews.Web.Services
             catch (Exception ex)
             {
                 _logger.LogError(ex, "Error processing query");
-                return $"An error occurred while processing your query: {ex.Message}";
+                throw new SemanticKernelException("An error occurred while processing your query.", ex);
             }
         }
 
         public void ResetConversation()
         {
-            _chatHistory.Clear();
+            _chatHistory = new ChatHistory();
             _chatHistory.AddSystemMessage("You are an AI assistant that helps users get information about company promotions and sales. Use the available functions to retrieve and provide relevant information.");
+            _logger.LogInformation("Conversation has been reset");
         }
+
+        private async Task<string> ProcessCompletionAsync(IAsyncEnumerable<StreamingChatMessageContent> completion)
+        {
+            StringBuilder fullMessage = new StringBuilder();
+            await foreach (var content in completion)
+            {
+                _logger.LogDebug("Received content: {Role} - {Content}", content.Role, content.Content);
+                fullMessage.Append(content.Content);
+            }
+            return fullMessage.ToString();
+        }
+    }
+
+    public class OpenAISettings
+    {
+        public string ModelId { get; set; }
+        public string ApiKey { get; set; }
+    }
+
+    public class SemanticKernelException : Exception
+    {
+        public SemanticKernelException(string message, Exception innerException) : base(message, innerException) { }
+    }
+
+    public interface ISemanticKernelService
+    {
+        Task<string> ProcessQueryAsync(string query);
+        void ResetConversation();
     }
 }
