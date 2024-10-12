@@ -21,6 +21,8 @@ CorporateNews is a web application that provides AI-powered insights into compan
 - Real-time news fetching and processing
 - Conversation history management
 - Responsive web design
+![Screenshot 2024-10-11 231506](https://github.com/user-attachments/assets/c8b5b4d1-b064-493c-be80-39aaf0527c9a)
+![Screenshot 2024-10-11 231550](https://github.com/user-attachments/assets/3e81e0a2-a6b2-4b87-bc58-19345079e08d)
 
 ## Project Structure
 
@@ -91,10 +93,10 @@ The solution consists of the following projects:
 ## Testing
 
 To run the unit tests:
-
+```
 cd CorporateNews.Test
 dotnet test
-
+```
 
 ## Contributing
 
