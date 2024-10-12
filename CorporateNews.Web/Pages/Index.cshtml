@@ -1,0 +1,35 @@
+﻿@page
+@model IndexModel
+@{
+    ViewData["Title"] = "Home page";
+}
+
+<div class="text-center">
+    <h1 class="display-4">Welcome to Corporate News</h1>
+    <p>Ask about recent promotions or sales information.</p>
+</div>
+
+<div class="row">
+    <div class="col-md-6 offset-md-3">
+        <form method="post">
+            <div class="form-group">
+                <label asp-for="UserQuery">Your Question:</label>
+                <input asp-for="UserQuery" class="form-control" />
+            </div>
+            <button type="submit" class="btn btn-primary mt-2">Submit</button>
+        </form>
+        <form method="post" asp-page-handler="Reset" class="mt-2">
+            <button type="submit" class="btn btn-secondary">Reset Conversation</button>
+        </form>
+    </div>
+</div>
+
+@if (!string.IsNullOrEmpty(Model.Result))
+{
+    <div class="row mt-4">
+        <div class="col-md-8 offset-md-2">
+            <h3>Result:</h3>
+            <pre>@Model.Result</pre>
+        </div>
+    </div>
+}
